@@ -1,85 +1,87 @@
 ﻿using System;
 using System.Collections.Generic;
+using UnitTestApp.Common;
+using UnitTestApp.Errors;
 using UnitTestApp.Models;
 
 namespace UnitTestApp
 {
-    /// <summary>
-    /// Hesap bakiyesini ve o hesaba ait işlem geçmişini yöneten sınıf.
-    /// </summary>
     public class BankAccount
     {
-        // Koleksiyonun dışarıdan manipüle edilmesini engellemek için private tutulur
         private readonly List<Transaction> _transactions = new();
 
         public string AccountHolder { get; }
         public decimal Balance { get; private set; }
-
-        // Dış dünyaya sadece okunabilir (IReadOnlyCollection) liste sunulur
         public IReadOnlyCollection<Transaction> Transactions => _transactions.AsReadOnly();
 
+        // Constructor'da doğrudan nesne oluşturulamama durumu için guard clause kalır
         public BankAccount(string accountHolder, decimal initialBalance = 0)
         {
             if (string.IsNullOrWhiteSpace(accountHolder))
-                throw new ArgumentException("Hesap sahibi adı boş olamaz.", nameof(accountHolder));
+                throw new ArgumentException(BankErrors.EmptyAccountHolder.Description, nameof(accountHolder));
 
             if (initialBalance < 0)
-                throw new ArgumentOutOfRangeException(nameof(initialBalance), "Başlangıç bakiyesi negatif olamaz.");
+                throw new ArgumentOutOfRangeException(nameof(initialBalance), BankErrors.NegativeInitialBalance.Description);
 
             AccountHolder = accountHolder;
             Balance = initialBalance;
 
-            // Başlangıç tutarı varsa ilk hareket (açılış bakiyesi) olarak kaydedilir
             if (initialBalance > 0)
             {
                 _transactions.Add(new Transaction(TransactionType.Deposit, initialBalance, "Açılış bakiyesi"));
             }
         }
 
-        // Para Yatırma
-        public void Deposit(decimal amount, string description = "Nakit Para Yatırma")
+        // Para Yatırma: Hata durumunda exception yerine Result döner
+        public Result Deposit(decimal amount, string description = "Nakit Para Yatırma")
         {
             if (amount <= 0)
-                throw new ArgumentOutOfRangeException(nameof(amount), "Yatırılacak tutar 0'dan büyük olmalıdır.");
+                return Result.Failure(BankErrors.InvalidAmount);
 
             Balance += amount;
             _transactions.Add(new Transaction(TransactionType.Deposit, amount, description));
+
+            return Result.Success();
         }
 
-        // Para Çekme
-        public void Withdraw(decimal amount, string description = "Nakit Para Çekme")
+        // Para Çekme: Yetersiz bakiye durumunda Result.Failure döner
+        public Result Withdraw(decimal amount, string description = "Nakit Para Çekme")
         {
             if (amount <= 0)
-                throw new ArgumentOutOfRangeException(nameof(amount), "Çekilecek tutar 0'dan büyük olmalıdır.");
+                return Result.Failure(BankErrors.InvalidAmount);
 
             if (amount > Balance)
-                throw new InvalidOperationException("Yetersiz bakiye.");
+                return Result.Failure(BankErrors.InsufficientFunds);
 
             Balance -= amount;
             _transactions.Add(new Transaction(TransactionType.Withdraw, amount, description));
+
+            return Result.Success();
         }
 
-        // Transfer Çıkışı (internal: Sadece TransferService gibi aynı proje içindeki sınıflar erişebilir)
-        internal void TransferOut(decimal amount, string targetAccountHolder)
+        internal Result TransferOut(decimal amount, string targetAccountHolder)
         {
             if (amount <= 0)
-                throw new ArgumentOutOfRangeException(nameof(amount), "Transfer tutarı 0'dan büyük olmalıdır.");
+                return Result.Failure(BankErrors.InvalidAmount);
 
             if (amount > Balance)
-                throw new InvalidOperationException("Transfer için yetersiz bakiye.");
+                return Result.Failure(BankErrors.InsufficientFunds);
 
             Balance -= amount;
             _transactions.Add(new Transaction(TransactionType.TransferOut, amount, $"{targetAccountHolder} alıcısına transfer."));
+
+            return Result.Success();
         }
 
-        // Transfer Girişi
-        internal void TransferIn(decimal amount, string sourceAccountHolder)
+        internal Result TransferIn(decimal amount, string sourceAccountHolder)
         {
             if (amount <= 0)
-                throw new ArgumentOutOfRangeException(nameof(amount), "Transfer tutarı 0'dan büyük olmalıdır.");
+                return Result.Failure(BankErrors.InvalidAmount);
 
             Balance += amount;
             _transactions.Add(new Transaction(TransactionType.TransferIn, amount, $"{sourceAccountHolder} kaynağından transfer."));
+
+            return Result.Success();
         }
     }
 }

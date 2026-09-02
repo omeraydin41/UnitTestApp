@@ -1,36 +1,31 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using UnitTestApp.Common;
+using UnitTestApp.Errors;
 
 namespace UnitTestApp.Services
 {
-
-    /// <summary>
-    /// İki BankAccount nesnesi arasındaki para aktarımını (virman) yöneten servis.
-    /// </summary>
     public class TransferService
     {
-        public void Transfer(BankAccount source, BankAccount target, decimal amount)
+        public Result Transfer(BankAccount source, BankAccount target, decimal amount)
         {
-            if (source == null)
-                throw new ArgumentNullException(nameof(source), "Kaynak hesap boş olamaz.");
+            // Null kontrolleri
+            if (source == null || target == null)
+                return Result.Failure(BankErrors.NullAccount);
 
-            if (target == null)
-                throw new ArgumentNullException(nameof(target), "Hedef hesap boş olamaz.");
-
+            // Aynı hesap kontrolü
             if (ReferenceEquals(source, target))
-                throw new InvalidOperationException("Aynı hesaba transfer yapılamaz.");
+                return Result.Failure(BankErrors.SameAccountTransfer);
 
+            // Tutar kontrolü
             if (amount <= 0)
-                throw new ArgumentOutOfRangeException(nameof(amount), "Transfer tutarı 0'dan büyük olmalıdır.");
+                return Result.Failure(BankErrors.InvalidAmount);
 
-            // 1. Gönderen hesaptan çekilir (bakiye yetersizse exception fırlatır, hedef hesaba geçmez)
-            source.TransferOut(amount, target.AccountHolder);
+            // Kaynaktan çekim dene: Başarısız olursa doğrudan dön ve hedef hesaba dokunma
+            var withdrawResult = source.TransferOut(amount, target.AccountHolder);
+            if (withdrawResult.IsFailure)
+                return withdrawResult;
 
-            // 2. Alıcı hesaba eklenir
-            target.TransferIn(amount, source.AccountHolder);
+            // Alıcıya aktar
+            return target.TransferIn(amount, source.AccountHolder);
         }
     }
 }
